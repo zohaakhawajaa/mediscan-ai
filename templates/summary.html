@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Summary — MediScan AI{% endblock %}
+{% block content %}
+<h1>Report summary</h1>
+
+<div class="grid">
+  <div class="card">
+    <h2>Chest X-ray</h2>
+    {% if has_xray %}<span class="badge badge-ok">Completed</span>
+    {% else %}<span class="badge">Not run</span> <a href="{{ url_for('xray.xray') }}">Run now</a>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Blood tests</h2>
+    {% if has_lab %}<span class="badge badge-ok">Completed</span>
+    {% else %}<span class="badge">Not run</span> <a href="{{ url_for('labs.labs') }}">Run now</a>{% endif %}
+  </div>
+  <div class="card">
+    <h2>PDF report</h2>
+    {% if has_report %}<span class="badge badge-ok">Completed</span>
+    {% else %}<span class="badge">Not run</span> <a href="{{ url_for('report.report') }}">Run now</a>{% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Summary preview</h2>
+  <pre class="summary-pre">{{ summary_text }}</pre>
+  <div class="btn-row">
+    <a class="btn" href="{{ url_for('summary.summary_download') }}">Download summary (.txt)</a>
+    <button type="button" class="btn btn-secondary" onclick="window.print()">Print / save as PDF</button>
+    <form method="post" action="{{ url_for('summary.reset_session') }}" class="inline"
+          onsubmit="return confirm('Clear all results from this session?');">
+      <button type="submit" class="btn btn-danger">Start new analysis</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

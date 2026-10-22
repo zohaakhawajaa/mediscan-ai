@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+uploads/
+.report_store/
+.history_store/
+.eval_store/
+models/
+validation_data/
+test_uploads/
+test_report_store/
+*.log
+.pytest_cache/

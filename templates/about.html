@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}About — MediScan AI{% endblock %}
+{% block content %}
+<h1>About MediScan AI</h1>
+
+<p class="lead">MediScan AI is a self-contained application for three
+clinical-data workflows: chest X-ray pneumonia screening, blood-test
+interpretation, and PDF lab-report extraction — all running locally with
+no external services.</p>
+
+<div class="grid">
+  <div class="card">
+    <h2>Chest X-ray screening</h2>
+    <p>DenseNet121 binary classifier (PyTorch) that outputs a pneumonia
+    probability for an uploaded image, with an optional Grad-CAM attention
+    heatmap showing which regions most influenced the prediction.</p>
+  </div>
+  <div class="card">
+    <h2>Blood-test interpretation</h2>
+    <p>Compares entered laboratory values against configurable reference
+    ranges and flags out-of-range results. It reports range compliance only
+    and performs no diagnosis.</p>
+  </div>
+  <div class="card">
+    <h2>PDF report extraction</h2>
+    <p>Extracts text from uploaded PDF lab reports, detects candidate
+    measurements, and routes them into the blood-test module. Scanned
+    pages are reported honestly instead of being silently ignored.</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Model &amp; data provenance</h2>
+  <table class="table">
+    <tr><th>Repository</th><td>huggingface.co/luanacarolina/pneumonia-chest-xray-classifier</td></tr>
+    <tr><th>Architecture</th><td>DenseNet121 with a single-logit BCE head</td></tr>
+    <tr><th>Reported metrics</th><td>Accuracy 96.61%, sensitivity 99.23%,
+    specificity 93.63%, AUC 99.41% (held-out test set)</td></tr>
+    <tr><th>Training data</th><td>Kermany et al. (2018) pediatric chest X-ray
+    dataset, Guangzhou Women and Children's Medical Center, ages 1–5</td></tr>
+    <tr><th>License</th><td>CC BY 4.0 (weights and model card)</td></tr>
+    <tr><th>Limitations</th><td>Validated only on pediatric images from a
+    single institution; over-predicts PNEUMONIA on low-quality or
+    non-chest inputs. Not validated for adults or clinical use.</td></tr>
+  </table>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Privacy architecture</h2>
+    <p>All processing is local: images and PDFs are handled by this server,
+    report text is stored server-side with a 6-hour expiry rather than in
+    the browser cookie, and no data is sent to third-party services.</p>
+  </div>
+  <div class="card">
+    <h2>Tech stack</h2>
+    <p>Python, Flask, PyTorch / torchvision, PyMuPDF, Pillow, NumPy,
+    pytest. Single-process deployment (Flask dev server or Waitress).</p>
+  </div>
+  <div class="card">
+    <h2>Intended use</h2>
+    <p>For research use only — not for diagnostic use.</p>
+  </div>
+</div>
+{% endblock %}

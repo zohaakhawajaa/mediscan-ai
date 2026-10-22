@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — MediScan AI{% endblock %}
+{% block content %}
+<h1>MediScan AI Dashboard</h1>
+<p class="lead">Automated analysis for chest X-ray screening,
+blood-test interpretation, and PDF report extraction.</p>
+
+<div class="grid">
+  <div class="card">
+    <h2>Chest X-ray screening</h2>
+    <p>DenseNet121 binary classifier (NORMAL vs PNEUMONIA), pretrained on
+    pediatric chest X-rays.</p>
+    <p>
+      {% if xray_status.available %}
+        <span class="badge badge-ok">Model ready</span>
+      {% else %}
+        <span class="badge badge-warn">Model unavailable</span>
+      {% endif %}
+      <small>{{ xray_status.detail }}</small>
+    </p>
+    <a class="btn" href="{{ url_for('xray.xray') }}">Upload X-ray</a>
+  </div>
+
+  <div class="card">
+    <h2>Blood-test interpretation</h2>
+    <p>Enter common lab measurements and flag values outside configurable
+    reference ranges.</p>
+    <a class="btn" href="{{ url_for('labs.labs') }}">Enter results</a>
+  </div>
+
+  <div class="card">
+    <h2>PDF report extraction</h2>
+    <p>Extract text from text-based PDF reports, review it, then interpret
+    detected lab candidates. Scanned PDFs require OCR.</p>
+    <a class="btn" href="{{ url_for('report.report') }}">Upload report</a>
+  </div>
+
+  <div class="card">
+    <h2>Report summary</h2>
+    <p>Review everything analyzed in this session and download a summary.</p>
+    <a class="btn" href="{{ url_for('summary.summary') }}">View summary</a>
+  </div>
+</div>
+{% endblock %}

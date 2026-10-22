@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Chest X-ray — MediScan AI{% endblock %}
+{% block content %}
+<h1>Chest X-ray screening</h1>
+
+{% if not status.available %}
+<div class="flash flash-error">
+  X-ray screening is currently unavailable: {{ status.detail }}
+  Other modules still work.
+</div>
+{% endif %}
+
+<div class="card">
+  <form method="post" enctype="multipart/form-data" id="xray-form">
+    <label for="xray_image">Chest X-ray image (PNG, JPEG, BMP, TIFF, WebP; max 10 MB)</label>
+    <input type="file" id="xray_image" name="xray_image" accept="image/*" required>
+    <label class="check">
+      <input type="checkbox" name="heatmap" checked> Attention heatmap (Grad-CAM)
+    </label>
+    <button class="btn" type="submit" {% if not status.available %}disabled{% endif %}>Analyze</button>
+  </form>
+</div>
+
+{% if result and result.ok %}
+<div class="card result">
+  <h2>Result</h2>
+  {% if image_filename %}
+    <img class="xray-preview" src="{{ url_for('xray.uploaded_xray', filename=image_filename) }}" alt="Uploaded chest X-ray">
+  {% endif %}
+  <table class="table">
+    <tr><th>Label</th><td><span class="badge {% if result.label == 'PNEUMONIA' %}badge-warn{% else %}badge-ok{% endif %}">{{ result.label }}</span></td></tr>
+    <tr><th>P(pneumonia)</th><td>{{ '%.3f'|format(result.pneumonia_probability) }}</td></tr>
+    <tr><th>Model confidence</th><td>{{ '%.1f'|format(result.confidence * 100) }}%</td></tr>
+    <tr><th>Model</th><td>{{ result.model }}</td></tr>
+  </table>
+  {% if result.heatmap_b64 %}
+  <div class="heatmap-block">
+    <h3>Attention heatmap (Grad-CAM)</h3>
+    <img class="heatmap" src="data:image/png;base64,{{ result.heatmap_b64 }}" alt="Grad-CAM attention heatmap">
+    <p><small>Highlighted regions contributed most to this prediction.</small></p>
+  </div>
+  {% endif %}
+  <p class="ruo"><small>{{ result.disclaimer }}</small></p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var form = document.getElementById('xray-form');
+  if (!form) return;
+  form.addEventListener('submit', function () {
+    var btn = form.querySelector('button[type="submit"]');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.dataset.label = btn.textContent;
+    btn.textContent = 'Analyzing\u2026';
+  });
+})();
+</script>
+{% endblock %}
