@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Evaluation report — MediScan AI{% endblock %}
+{% block crumb %}<strong>Evaluation</strong> <span class="dim">/ report</span>{% endblock %}
+{% block content %}
+<h1>{{ report.model_name }}</h1>
+<p>
+  <span class="badge badge-info">{{ report.dataset }}</span>
+  <span class="badge">{{ report.split }} split</span>
+  <span class="badge">{{ report.evaluated_samples }} samples</span>
+  <span class="badge">threshold {{ '%.2f'|format(report.threshold) }}</span>
+  <span class="badge">{{ report.created_at | ts }}</span>
+</p>
+{% if report.evaluated_samples < report.available_samples %}
+<p class="hint">Quick run: {{ report.evaluated_samples }} evenly spaced samples
+from a split of {{ report.available_samples }}. Use
+<span class="mono">scripts/evaluate_model.py --limit 0</span> for the full split.</p>
+{% endif %}
+
+<div class="metric-grid">
+  <div class="metric">
+    <div class="value">{{ '%.1f'|format(report.metrics.accuracy * 100) }}%</div>
+    <div class="label">Accuracy</div>
+    {% if report.metrics.accuracy_ci95 %}
+    <div class="sub">95% CI {{ '%.1f'|format(report.metrics.accuracy_ci95[0] * 100) }}–{{ '%.1f'|format(report.metrics.accuracy_ci95[1] * 100) }}%</div>
+    {% endif %}
+  </div>
+  <div class="metric">
+    <div class="value">{{ '%.1f'|format(report.metrics.sensitivity * 100) }}%</div>
+    <div class="label">Sensitivity</div>
+  </div>
+  <div class="metric">
+    <div class="value">{{ '%.1f'|format(report.metrics.specificity * 100) }}%</div>
+    <div class="label">Specificity</div>
+  </div>
+  <div class="metric">
+    <div class="value">{% if report.metrics.precision is not none %}{{ '%.1f'|format(report.metrics.precision * 100) }}%{% else %}—{% endif %}</div>
+    <div class="label">Precision</div>
+  </div>
+  <div class="metric">
+    <div class="value">{% if report.metrics.f1 is not none %}{{ '%.1f'|format(report.metrics.f1 * 100) }}%{% else %}—{% endif %}</div>
+    <div class="label">F1</div>
+  </div>
+  <div class="metric">
+    <div class="value">{% if report.metrics.auc is not none %}{{ '%.3f'|format(report.metrics.auc) }}{% else %}—{% endif %}</div>
+    <div class="label">ROC AUC</div>
+  </div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>ROC curve</h2>
+    {{ roc_svg | safe }}
+    <p class="hint">True positive rate versus false positive rate across
+    thresholds. The dashed diagonal is chance.</p>
+  </div>
+
+  <div class="card">
+    <h2>Confusion matrix</h2>
+    {% set c = report.metrics.confusion %}
+    <div class="confusion">
+      <div class="head"></div>
+      <div class="head">Pred NORMAL</div>
+      <div class="head">Pred PNEUMONIA</div>
+      <div class="head">Actual NORMAL</div>
+      <div><div class="num">{{ c.tn }}</div><span class="small dim">TN</span></div>
+      <div><div class="num">{{ c.fp }}</div><span class="small dim">FP</span></div>
+      <div class="head">Actual PNEUMONIA</div>
+      <div><div class="num">{{ c.fn }}</div><span class="small dim">FN</span></div>
+      <div><div class="num">{{ c.tp }}</div><span class="small dim">TP</span></div>
+    </div>
+    <p class="hint" style="margin-top: 0.7rem;">
+      Positive class = PNEUMONIA. Support: {{ report.metrics.support.positive }}
+      positive / {{ report.metrics.support.negative }} negative.
+    </p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Reliability (calibration)</h2>
+  {% if report.metrics.calibration %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Probability bin</th><th>Count</th><th>Mean predicted</th><th>Observed positive</th></tr>
+      </thead>
+      <tbody>
+        {% for row in report.metrics.calibration %}
+        <tr>
+          <td class="mono">{{ row.low }}–{{ row.high }}</td>
+          <td>{{ row.count }}</td>
+          <td>{{ '%.1f'|format(row.mean_probability * 100) }}%</td>
+          <td>{{ '%.1f'|format(row.fraction_positive * 100) }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">A well-calibrated model has “mean predicted” close to
+  “observed positive” in each bin.</p>
+  {% else %}
+  <div class="empty">Not enough probability spread to build calibration bins.</div>
+  {% endif %}
+</div>
+
+<p class="ruo">Measured on {{ report.dataset }} ({{ report.split }} split) with
+real inference. Metrics describe this dataset only; they are not evidence of
+clinical safety or efficacy. For research use only — not for diagnostic use.</p>
+
+<div class="btn-row">
+  <a class="btn" href="{{ url_for('eval.dashboard') }}">Back to evaluation lab</a>
+  <a class="btn btn-secondary" href="{{ url_for('eval.report_download', report_id=report.id) }}">Download JSON</a>
+  {% if spec %}<a class="btn btn-secondary" href="{{ url_for('models.model_detail', key=spec.key) }}">Model details</a>{% endif %}
+</div>
+{% endblock %}

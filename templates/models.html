@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Model center — MediScan AI{% endblock %}
+{% block crumb %}<strong>Model center</strong> <span class="dim">/ registry</span>{% endblock %}
+{% block content %}
+<h1>Model center</h1>
+<p class="lead muted">Every model in one registry with verified provenance.
+“Reported” metrics come from the original authors; “measured” metrics come
+from real local evaluation runs. Unavailable models are never silently
+substituted.</p>
+
+<div class="grid">
+{% for row in models %}
+  {% set spec = row.spec %}
+  <article class="card">
+    <div class="card-head">
+      <h2>{{ spec.name }}</h2>
+      {% if row.status.available %}
+        <span class="badge badge-ok">Available</span>
+      {% else %}
+        <span class="badge badge-warn">Not trained yet</span>
+      {% endif %}
+    </div>
+    <p class="mono dim">{{ spec.key }}</p>
+    <p class="muted">{{ spec.architecture }}</p>
+
+    <div class="table-wrap" style="margin-top: 0.6rem;">
+      <table class="table kv">
+        <tr><th>Status</th><td>{{ row.status.detail }}</td></tr>
+        <tr><th>Training</th><td>{{ spec.training_status }}</td></tr>
+        <tr><th>Dataset</th><td>{{ spec.dataset }}</td></tr>
+        <tr><th>License</th><td>{{ spec.license }}</td></tr>
+        <tr><th>Checkpoint</th><td class="mono">{{ spec.checkpoint }}</td></tr>
+      </table>
+    </div>
+
+    {% set metrics = spec.reported_metrics %}
+    {% if metrics %}
+      <div class="metric-grid">
+        {% for key, label in [('accuracy','Accuracy'), ('sensitivity','Sensitivity'), ('specificity','Specificity'), ('auc','AUC')] %}
+          {% if metrics.get(key) is not none %}
+          <div class="metric">
+            <div class="value">{{ '%.1f'|format(metrics.get(key) * 100) }}%</div>
+            <div class="label">{{ label }}</div>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% if metrics.get('note') %}<p class="hint">{{ metrics.note }}</p>{% endif %}
+    {% else %}
+      <div class="empty" style="margin-top: 0.8rem;">No measured metrics yet.
+      Run a local training job to produce them.</div>
+    {% endif %}
+
+    {% if spec.limitations %}
+    <ul class="list-check">
+      {% for limitation in spec.limitations %}<li>{{ limitation }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="btn-row">
+      <a class="btn btn-small" href="{{ url_for('models.model_detail', key=spec.key) }}">Details</a>
+      {% if row.status.available and spec.task == 'chest-xray-pneumonia' %}
+      <a class="btn btn-small btn-secondary" href="{{ url_for('xray.xray') }}">Use in X-ray</a>
+      {% endif %}
+      {% if row.status.available and spec.task == 'chest-xray-pneumonia' %}
+      <a class="btn btn-small btn-ghost" href="{{ url_for('eval.dashboard') }}">Evaluate</a>
+      {% endif %}
+    </div>
+  </article>
+{% endfor %}
+</div>
+{% endblock %}

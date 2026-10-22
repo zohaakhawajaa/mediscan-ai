@@ -1,23 +1,32 @@
 {% extends "base.html" %}
 {% block title %}Summary — MediScan AI{% endblock %}
+{% block crumb %}<strong>Summary</strong> <span class="dim">/ session export</span>{% endblock %}
 {% block content %}
 <h1>Report summary</h1>
+<p class="lead muted">Everything analyzed in this browser session, in one
+research sheet. Results expire with the session.</p>
 
 <div class="grid">
   <div class="card">
-    <h2>Chest X-ray</h2>
-    {% if has_xray %}<span class="badge badge-ok">Completed</span>
-    {% else %}<span class="badge">Not run</span> <a href="{{ url_for('xray.xray') }}">Run now</a>{% endif %}
+    <div class="card-head"><h2>Chest X-ray</h2>
+      {% if has_xray %}<span class="badge badge-ok">Completed</span>
+      {% else %}<span class="badge">Not run</span>{% endif %}
+    </div>
+    {% if not has_xray %}<a class="btn btn-small" href="{{ url_for('xray.xray') }}">Run now</a>{% endif %}
   </div>
   <div class="card">
-    <h2>Blood tests</h2>
-    {% if has_lab %}<span class="badge badge-ok">Completed</span>
-    {% else %}<span class="badge">Not run</span> <a href="{{ url_for('labs.labs') }}">Run now</a>{% endif %}
+    <div class="card-head"><h2>Blood tests</h2>
+      {% if has_lab %}<span class="badge badge-ok">Completed</span>
+      {% else %}<span class="badge">Not run</span>{% endif %}
+    </div>
+    {% if not has_lab %}<a class="btn btn-small" href="{{ url_for('labs.labs') }}">Run now</a>{% endif %}
   </div>
   <div class="card">
-    <h2>PDF report</h2>
-    {% if has_report %}<span class="badge badge-ok">Completed</span>
-    {% else %}<span class="badge">Not run</span> <a href="{{ url_for('report.report') }}">Run now</a>{% endif %}
+    <div class="card-head"><h2>PDF report</h2>
+      {% if has_report %}<span class="badge badge-ok">Completed</span>
+      {% else %}<span class="badge">Not run</span>{% endif %}
+    </div>
+    {% if not has_report %}<a class="btn btn-small" href="{{ url_for('report.report') }}">Run now</a>{% endif %}
   </div>
 </div>
 
@@ -26,9 +35,10 @@
   <pre class="summary-pre">{{ summary_text }}</pre>
   <div class="btn-row">
     <a class="btn" href="{{ url_for('summary.summary_download') }}">Download summary (.txt)</a>
-    <button type="button" class="btn btn-secondary" onclick="window.print()">Print / save as PDF</button>
+    <button type="button" class="btn btn-secondary" data-print>Print / save as PDF</button>
     <form method="post" action="{{ url_for('summary.reset_session') }}" class="inline"
-          onsubmit="return confirm('Clear all results from this session?');">
+          data-confirm="Clear all results from this session?" data-busy="Clearing…">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-danger">Start new analysis</button>
     </form>
   </div>

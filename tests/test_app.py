@@ -90,11 +90,12 @@ def test_xray_result_page_does_not_present_scores_as_reliable(app, client,
         "xray_image": (io.BytesIO(buf.getvalue()), "xr.png")},
         content_type="multipart/form-data")
     assert resp.status_code == 200
-    assert b"Model confidence" in resp.data
+    assert b"Model certainty (uncalibrated)" in resp.data
     assert b"For research use only" in resp.data
     assert b"Not for diagnostic use" in resp.data
     # The old misleading label must not reappear as a bare claim.
     assert b"<th>Confidence</th>" not in resp.data
+    assert b"Model confidence" not in resp.data
 
 
 def test_low_resolution_upload_rejected_end_to_end(client):

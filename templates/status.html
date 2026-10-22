@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Status — MediScan AI{% endblock %}
+{% block crumb %}<strong>Status</strong> <span class="dim">/ runtime &amp; storage</span>{% endblock %}
+{% block content %}
+<h1>System status</h1>
+<p class="lead muted">Runtime versions, model readiness, dataset availability
+and storage lifetimes — all verified from this running process.</p>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Runtime</h2>
+    <div class="table-wrap">
+      <table class="table kv">
+        <tr><th>Environment</th><td>{{ status.environment }}</td></tr>
+        <tr><th>DICOM support</th><td>
+          {% if status.dicom %}<span class="badge badge-ok">pydicom installed</span>
+          {% else %}<span class="badge badge-warn">not installed</span>{% endif %}
+        </td></tr>
+        {% for package, version in status.versions.items() %}
+        <tr><th class="mono">{{ package }}</th>
+          <td>{% if version %}<span class="mono">{{ version }}</span>{% else %}<span class="dim">not installed</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Storage lifetimes</h2>
+    <div class="table-wrap">
+      <table class="table kv">
+        <tr><th>Uploads</th><td>{{ (status.config.UPLOAD_MAX_AGE_SECONDS // 3600) }} h</td></tr>
+        <tr><th>Extracted reports</th><td>{{ (status.config.REPORT_TTL_SECONDS // 3600) }} h</td></tr>
+        <tr><th>Evaluation reports</th><td>{{ (status.config.EVAL_TTL_SECONDS // 3600) }} h</td></tr>
+        <tr><th>Activity history</th><td>{{ (status.config.HISTORY_TTL_SECONDS // 3600) }} h (metadata only)</td></tr>
+        <tr><th>Upload cap</th><td>{{ (status.config.MAX_CONTENT_LENGTH // (1024 * 1024)) }} MB</td></tr>
+        <tr><th>CSRF protection</th><td>
+          {% if status.config.CSRF_ENABLED %}<span class="badge badge-ok">enabled</span>
+          {% else %}<span class="badge badge-warn">disabled</span>{% endif %}
+        </td></tr>
+        <tr><th>Quick-eval cap</th><td>{{ status.config.MAX_QUICK_EVAL }} samples</td></tr>
+      </table>
+    </div>
+    <p class="hint">Server-side stores use random IDs and TTL sweeps; browser
+    cookies never contain report text or images.</p>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Dataset</h2>
+    {% if status.dataset.available %}
+      <span class="badge badge-ok">Available</span>
+    {% else %}
+      <span class="badge badge-warn">Missing</span>
+    {% endif %}
+  </div>
+  {% if status.dataset.available %}
+    <p class="mono dim">{{ status.dataset.name }} · {{ status.dataset.size_mb }} MB</p>
+    <div class="metric-grid">
+      {% for split, count in status.dataset.counts.items() %}
+      <div class="metric"><div class="value">{{ count }}</div><div class="label">{{ split }}</div></div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">PneumoniaMNIST not found; quick evaluation is disabled.</div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Models</h2>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Key</th><th>Name</th><th>Status</th><th>Detail</th></tr></thead>
+      <tbody>
+        {% for row in status.models %}
+        <tr>
+          <td class="mono">{{ row.spec.key }}</td>
+          <td>{{ row.spec.name }}</td>
+          <td>
+            {% if row.status.available %}<span class="badge badge-ok">Available</span>
+            {% else %}<span class="badge badge-warn">Unavailable</span>{% endif %}
+          </td>
+          <td class="muted">{{ row.status.detail }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Security posture</h2>
+  <ul class="list-check">
+    <li>Content-Security-Policy restricts scripts to this origin; no inline JS.</li>
+    <li>Session cookies are signed; set <span class="mono">MEDISCAN_SECRET_KEY</span> for production.</li>
+    <li>CSRF tokens protect every state-changing form.</li>
+    <li>Uploads are served only to the owning session and swept after the TTL.</li>
+    <li>Model downloads are the only outbound network call (Hugging Face, DenseNet only).</li>
+  </ul>
+</div>
+{% endblock %}

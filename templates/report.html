@@ -1,77 +1,112 @@
 {% extends "base.html" %}
 {% block title %}PDF report — MediScan AI{% endblock %}
+{% block crumb %}<strong>PDF report</strong> <span class="dim">/ extraction</span>{% endblock %}
 {% block content %}
 <h1>PDF report extraction</h1>
+<p class="lead muted">Extract text from a text-based PDF, review it carefully,
+then detect lab candidates for interpretation. Nothing is analyzed until you
+submit the reviewed text.</p>
 
 <div class="card">
-  <form method="post" enctype="multipart/form-data">
-    <label for="pdf_file">Medical report PDF (text-based; max 10 MB)</label>
-    <input type="file" id="pdf_file" name="pdf_file" accept=".pdf" required>
-    <button class="btn" type="submit" name="action" value="extract">Extract text</button>
+  <h2>Upload report</h2>
+  <form method="post" enctype="multipart/form-data" data-busy="Extracting text…">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="dropzone" for="pdf_file" data-dropzone>
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+      <span class="dropzone-title">Drop a PDF report here</span>
+      <span class="dropzone-hint">Text-based PDF · max 10 MB</span>
+      <span class="file-name" data-file-name data-default-text="No file selected">No file selected</span>
+      <input type="file" id="pdf_file" name="pdf_file" accept=".pdf,application/pdf" required>
+    </label>
+    <div class="btn-row">
+      <button class="btn" type="submit" name="action" value="extract">Extract text</button>
+    </div>
   </form>
+  <p class="hint">Scanned PDFs contain no text layer; this app reports that
+  honestly instead of guessing values.</p>
 </div>
 
 {% if extraction %}
 <div class="card">
-  <h2>Extracted text — review before analysis</h2>
-  <p>Pages: {{ extraction.num_pages }}.
+  <div class="card-head">
+    <h2>Extracted text — review before analysis</h2>
+    {% if extraction.needs_ocr %}
+      <span class="badge badge-warn">OCR required</span>
+    {% else %}
+      <span class="badge badge-ok">Text extracted</span>
+    {% endif %}
+  </div>
+  <p class="muted small">Pages: {{ extraction.num_pages }}</p>
   {% if extraction.needs_ocr %}
-    <span class="badge badge-warn">OCR required</span>
     <div class="flash flash-error">{{ extraction.ocr_message }}</div>
-  {% else %}
-    <span class="badge badge-ok">Text extracted</span>
   {% endif %}
-  </p>
-  <form method="post">
-    <label for="reviewed_text">Full report text (edit if anything was extracted incorrectly — nothing is analyzed until you submit):</label>
+  <form method="post" data-busy="Detecting candidates…">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="reviewed_text">Full report text — edit anything that was
+    extracted incorrectly:</label>
     <textarea id="reviewed_text" name="reviewed_text" rows="12">{{ reviewed_text }}</textarea>
-    <button class="btn" type="submit" name="action" value="review">Detect lab candidates in reviewed text</button>
+    <div class="btn-row">
+      <button class="btn" type="submit" name="action" value="review">Detect lab candidates</button>
+    </div>
   </form>
 </div>
 {% endif %}
 
 {% if candidates is not none %}
 <div class="card result">
-  <h2>Detected lab candidates</h2>
+  <div class="card-head">
+    <h2>Detected lab candidates</h2>
+    <span class="badge badge-info">{{ candidates|length }} candidate(s)</span>
+  </div>
   {% if candidates %}
-  <p>These are <strong>candidates for your review only</strong>. Values may be
-  misread from context — confirm each one, choose a reference range, then interpret.</p>
+  <p class="muted">These are <strong>candidates for your review only</strong>.
+  Values may be misread from context — confirm each one, choose a reference
+  range, then interpret.</p>
   <form method="post" action="{{ url_for('labs.labs') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="form_source" value="candidates">
-    <table class="table">
-      <thead><tr><th>Use</th><th>Test</th><th>Value</th><th>Context in report</th><th>Reference range</th></tr></thead>
-      <tbody>
-        {% for c in candidates %}
-        <tr>
-          <td><input type="checkbox" name="use_candidate" value="{{ loop.index0 }}" checked></td>
-          <td>
-            <select name="test">
-              {% for key in ['hemoglobin','wbc','platelets','glucose','creatinine'] %}
-                <option value="{{ key }}" {% if c.test == key %}selected{% endif %}>{{ key }}</option>
-              {% endfor %}
-            </select>
-          </td>
-          <td><input type="text" name="value" value="{{ c.value }}"></td>
-          <td><small>{{ c.context }}</small></td>
-          <td>
-            {% if c.test in ['hemoglobin','creatinine'] %}
-              <select name="range"><option value="adult_male">adult_male</option><option value="adult_female">adult_female</option></select>
-            {% elif c.test == 'glucose' %}
-              <select name="range"><option value="fasting_adult">fasting_adult</option><option value="random_adult">random_adult</option></select>
-            {% else %}
-              <select name="range"><option value="adult">adult</option></select>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    <button class="btn" type="submit">Interpret selected candidates</button>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Use</th><th>Test</th><th>Value</th><th>Context in report</th><th>Reference range</th></tr>
+        </thead>
+        <tbody>
+          {% for c in candidates %}
+          <tr>
+            <td><input type="checkbox" name="use_candidate" value="{{ loop.index0 }}" checked></td>
+            <td>
+              <select name="test">
+                {% for key in ['hemoglobin','wbc','platelets','glucose','creatinine'] %}
+                  <option value="{{ key }}" {% if c.test == key %}selected{% endif %}>{{ key }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td><input type="text" name="value" value="{{ c.value }}"></td>
+            <td><small class="dim">{{ c.context }}</small></td>
+            <td>
+              {% if c.test in ['hemoglobin','creatinine'] %}
+                <select name="range"><option value="adult_male">adult_male</option><option value="adult_female">adult_female</option></select>
+              {% elif c.test == 'glucose' %}
+                <select name="range"><option value="fasting_adult">fasting_adult</option><option value="random_adult">random_adult</option></select>
+              {% else %}
+                <select name="range"><option value="adult">adult</option></select>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="btn-row">
+      <button class="btn" type="submit">Interpret selected candidates</button>
+    </div>
   </form>
   {% else %}
-  <p>No lab values could be detected in the reviewed text. You can still
-  enter values manually on the <a href="{{ url_for('labs.labs') }}">blood-test page</a>.
-  Missing information is never fabricated.</p>
+  <div class="empty">
+    No lab values could be detected in the reviewed text. You can still enter
+    values manually on the <a href="{{ url_for('labs.labs') }}">blood-test page</a>.
+    Missing information is never fabricated.
+  </div>
   {% endif %}
 </div>
 {% endif %}

@@ -41,8 +41,20 @@ class Config:
     # ~4 KB browser cookie limit.
     REPORT_STORE_FOLDER = os.path.join(BASE_DIR, ".report_store")
     REPORT_TTL_SECONDS = 6 * 60 * 60
-    MODEL_DIR = os.path.join(BASE_DIR, "models", "xray")
+    MODELS_ROOT = os.path.join(BASE_DIR, "models")
+    MODEL_DIR = os.path.join(MODELS_ROOT, "xray")
+    # Quick evaluations from the web UI are capped; the CLI script is not.
+    EVAL_STORE_FOLDER = os.path.join(BASE_DIR, ".eval_store")
+    EVAL_TTL_SECONDS = 24 * 60 * 60
+    MAX_QUICK_EVAL = 200
+    DATASET_NPZ = os.path.join(BASE_DIR, "validation_data", "pneumoniamnist.npz")
+    # Metadata-only session activity (never pixels, report text or lab values).
+    HISTORY_FOLDER = os.path.join(BASE_DIR, ".history_store")
+    HISTORY_TTL_SECONDS = 6 * 60 * 60
+    HISTORY_MAX_ENTRIES = 20
     ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "webp", "tif", "tiff"}
+    ALLOWED_DICOM_EXTENSIONS = {"dcm", "dicom"}
     ALLOWED_PDF_EXTENSIONS = {"pdf"}
+    CSRF_ENABLED = True
     HF_REPO_ID = "luanacarolina/pneumonia-chest-xray-classifier"
     HF_CHECKPOINT = "checkpoints/binary/densenet121.pt"

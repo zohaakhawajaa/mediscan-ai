@@ -15,6 +15,10 @@ class TestConfig(Config):
         os.path.abspath(__file__))), "test_uploads")
     REPORT_STORE_FOLDER = os.path.join(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))), "test_report_store")
+    EVAL_STORE_FOLDER = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "test_eval_store")
+    HISTORY_FOLDER = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "test_history_store")
     MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))), "models", "xray")
 
@@ -29,17 +33,18 @@ def app():
             os.remove(os.path.join(app.config["UPLOAD_FOLDER"], name))
         except OSError:
             pass
-    store = app.config["REPORT_STORE_FOLDER"]
-    if os.path.isdir(store):
-        for name in os.listdir(store):
+    for key in ("REPORT_STORE_FOLDER", "EVAL_STORE_FOLDER", "HISTORY_FOLDER"):
+        store = app.config[key]
+        if os.path.isdir(store):
+            for name in os.listdir(store):
+                try:
+                    os.remove(os.path.join(store, name))
+                except OSError:
+                    pass
             try:
-                os.remove(os.path.join(store, name))
+                os.rmdir(store)
             except OSError:
                 pass
-        try:
-            os.rmdir(store)
-        except OSError:
-            pass
 
 
 @pytest.fixture()

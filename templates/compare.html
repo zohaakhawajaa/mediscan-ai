@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Compare models — MediScan AI{% endblock %}
+{% block crumb %}<strong>Compare models</strong> <span class="dim">/ side-by-side</span>{% endblock %}
+{% block content %}
+<h1>Compare models</h1>
+<p class="lead muted">Run two registered models on the same image and compare
+their labels, probabilities and attention maps. Both models must have local
+checkpoints; running two models doubles CPU time.</p>
+
+<div class="card">
+  <form method="post" enctype="multipart/form-data" data-busy="Comparing…">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="field-grid">
+      <div>
+        <label for="model_a">Model A</label>
+        <select name="model_a" id="model_a">
+          {% for model in models %}
+          <option value="{{ model.key }}" {% if not model.available %}disabled{% endif %}>
+            {{ model.name }}{% if not model.available %} — unavailable{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="model_b">Model B</label>
+        <select name="model_b" id="model_b">
+          {% for model in models %}
+          <option value="{{ model.key }}" {% if not model.available %}disabled{% endif %}>
+            {{ model.name }}{% if not model.available %} — unavailable{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <label class="dropzone" for="compare_image" data-dropzone>
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+      <span class="dropzone-title">Drop a chest X-ray here</span>
+      <span class="dropzone-hint">PNG, JPEG, BMP, TIFF, WebP or DICOM · max 10 MB</span>
+      <span class="file-name" data-file-name data-default-text="No file selected">No file selected</span>
+      <input type="file" id="compare_image" name="xray_image"
+             accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.dcm,.dicom,image/*" required>
+    </label>
+    <label class="check"><input type="checkbox" name="heatmap" checked> Attention heatmaps (Grad-CAM)</label>
+    <div class="btn-row">
+      <button class="btn" type="submit">Run comparison</button>
+      <a class="btn btn-ghost" href="{{ url_for('models.model_center') }}">Model center</a>
+    </div>
+  </form>
+</div>
+
+{% if comparisons %}
+<div class="grid-2">
+  {% for item in comparisons %}
+  <div class="card">
+    <div class="card-head">
+      <h2>{{ item.spec.name }}</h2>
+      {% if item.result and item.result.ok %}
+        <span class="badge {% if item.result.label == 'PNEUMONIA' %}badge-warn{% else %}badge-ok{% endif %}">{{ item.result.label }}</span>
+      {% else %}
+        <span class="badge badge-danger">Failed</span>
+      {% endif %}
+    </div>
+
+    {% if item.result and item.result.ok %}
+      {% if image_filename %}
+        {% if item.result.heatmap_b64 %}
+        <div data-heatmap-scope>
+          <div class="heatmap-stage">
+            <img class="base" src="{{ url_for('models.compare_image', filename=image_filename) }}" alt="Compared chest X-ray">
+            <img class="overlay" data-heatmap-overlay
+                 src="data:image/png;base64,{{ item.result.heatmap_b64 }}"
+                 alt="Grad-CAM attention overlay" style="opacity: 0.55;">
+          </div>
+          <div class="heatmap-controls">
+            <span>Overlay</span>
+            <input type="range" min="0" max="100" value="55" data-heatmap-range
+                   aria-label="Attention overlay opacity">
+            <output data-heatmap-value>55%</output>
+          </div>
+        </div>
+        {% else %}
+        <div class="scan-frame"><img src="{{ url_for('models.compare_image', filename=image_filename) }}" alt="Compared chest X-ray"></div>
+        {% endif %}
+      {% endif %}
+      <div class="result-grid">
+        <div class="kv-row"><div class="kv-label">P(pneumonia)</div>
+          <div class="kv-value mono">{{ '%.3f'|format(item.result.pneumonia_probability) }}</div></div>
+        <div class="kv-row"><div class="kv-label">Model certainty (uncalibrated)</div>
+          <div class="kv-value">{{ '%.1f'|format(item.result.confidence * 100) }}%</div></div>
+      </div>
+      <p class="ruo">{{ item.result.disclaimer }}</p>
+    {% else %}
+      <div class="empty">{{ item.status.detail if item.status else 'Model unavailable.' }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+<div class="flash flash-info">Different models can disagree; disagreement is a
+signal to review the image and metadata, not a diagnosis.</div>
+{% endif %}
+{% endblock %}

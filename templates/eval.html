@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Evaluation — MediScan AI{% endblock %}
+{% block crumb %}<strong>Evaluation</strong> <span class="dim">/ measured metrics</span>{% endblock %}
+{% block content %}
+<h1>Evaluation lab</h1>
+<p class="lead muted">Run real inference over labelled PneumoniaMNIST samples
+and measure accuracy, sensitivity, specificity, ROC/AUC and calibration.
+Reports are stored for 24 hours; nothing is fabricated or cached across runs.</p>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Dataset</h2>
+    {% if dataset.available %}
+      <p><span class="badge badge-ok">Available</span>
+         <span class="mono dim">{{ dataset.name }} · {{ dataset.size_mb }} MB</span></p>
+      <div class="metric-grid">
+        {% for split, count in dataset.counts.items() %}
+        <div class="metric">
+          <div class="value">{{ count }}</div>
+          <div class="label">{{ split }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="hint">PneumoniaMNIST (MedMNIST v2), CC BY 4.0. Images are 28×28
+      upscaled to 224 — a deliberate but strong distribution shift versus real
+      radiographs.</p>
+    {% else %}
+      <div class="empty">Dataset not found on this server. Place
+      <span class="mono">pneumoniamnist.npz</span> in
+      <span class="mono">validation_data/</span> to enable quick evaluation.</div>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Quick evaluation</h2>
+    <form method="post" data-busy="Running evaluation…">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="model">Model</label>
+      <select name="model" id="model" required>
+        {% for model in models %}
+        <option value="{{ model.key }}" {% if not model.available %}disabled{% endif %}>
+          {{ model.name }}{% if not model.available %} — unavailable{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+
+      <div class="field-grid">
+        <div>
+          <label for="split">Split</label>
+          <select name="split" id="split">
+            <option value="test" selected>test (held out)</option>
+            <option value="val">val</option>
+            <option value="train">train (sanity check)</option>
+          </select>
+        </div>
+        <div>
+          <label for="limit">Max samples</label>
+          <input type="number" name="limit" id="limit" value="100"
+                 min="10" max="{{ max_limit }}" step="10">
+        </div>
+      </div>
+      <p class="hint">Capped at {{ max_limit }} samples per quick run. Use
+      <span class="mono">scripts/evaluate_model.py</span> for a full split on
+      the command line.</p>
+      <div class="btn-row">
+        <button class="btn" type="submit" {% if not dataset.available %}disabled{% endif %}>
+          Run evaluation
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Recent reports</h2>
+    <span class="badge">{{ reports|length }}</span>
+  </div>
+  {% if reports %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>When</th><th>Model</th><th>Split</th><th>N</th><th>Accuracy</th><th>AUC</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for report in reports %}
+        <tr>
+          <td class="nowrap">{{ report.created_at | ts }}</td>
+          <td>{{ report.model_name }}</td>
+          <td>{{ report.split }}</td>
+          <td>{{ report.evaluated_samples }}</td>
+          <td>{{ '%.1f'|format(report.metrics.accuracy * 100) }}%</td>
+          <td>{% if report.metrics.auc is not none %}{{ '%.3f'|format(report.metrics.auc) }}{% else %}—{% endif %}</td>
+          <td><a class="btn btn-small btn-secondary" href="{{ url_for('eval.report_view', report_id=report.id) }}">Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">No evaluations yet. Run one above; results include a
+  confusion matrix, ROC curve and reliability table.</div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ spec.name }} — MediScan AI{% endblock %}
+{% block crumb %}<strong>Model center</strong> <span class="dim">/ {{ spec.key }}</span>{% endblock %}
+{% block content %}
+<h1>{{ spec.name }}</h1>
+<p class="mono dim">{{ spec.key }}</p>
+<p>
+  {% if status.available %}
+    <span class="badge badge-ok">Available</span>
+  {% else %}
+    <span class="badge badge-warn">Unavailable</span>
+  {% endif %}
+  <span class="badge">{{ spec.adapter }}</span>
+  <span class="badge">{{ spec.task }}</span>
+</p>
+
+<div class="split">
+  <div class="card">
+    <h2>Specification</h2>
+    <div class="table-wrap">
+      <table class="table kv">
+        <tr><th>Status detail</th><td>{{ status.detail }}</td></tr>
+        <tr><th>Architecture</th><td>{{ spec.architecture }}</td></tr>
+        <tr><th>Training status</th><td>{{ spec.training_status }}</td></tr>
+        <tr><th>Dataset</th><td>{{ spec.dataset }}</td></tr>
+        <tr><th>Source</th><td>{{ spec.source }}</td></tr>
+        <tr><th>License</th><td>{{ spec.license }}</td></tr>
+        <tr><th>Version</th><td>{{ spec.version }}</td></tr>
+        <tr><th>Preprocessing</th><td>{{ spec.preprocessing }}</td></tr>
+        <tr><th>Grad-CAM layer</th><td>{{ spec.gradcam_layer or 'managed by adapter' }}</td></tr>
+        <tr><th>Checkpoint</th><td class="mono">{{ spec.checkpoint }}</td></tr>
+        <tr><th>Labels</th><td>{{ spec.labels | join(', ') }}</td></tr>
+        {% if spec.download_note %}<tr><th>Downloads</th><td>{{ spec.download_note }}</td></tr>{% endif %}
+      </table>
+    </div>
+    <div class="btn-row">
+      {% if status.available %}
+      <a class="btn btn-small" href="{{ url_for('xray.xray') }}">Use in X-ray</a>
+      <a class="btn btn-small btn-secondary" href="{{ url_for('models.compare') }}">Compare</a>
+      {% endif %}
+      <a class="btn btn-small btn-ghost" href="{{ url_for('eval.dashboard') }}">Evaluation lab</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Measured / reported performance</h2>
+    {% set metrics = spec.reported_metrics %}
+    {% if metrics %}
+      <div class="metric-grid">
+        {% for key, label in [('accuracy','Accuracy'), ('sensitivity','Sensitivity'), ('specificity','Specificity'), ('precision','Precision'), ('f1','F1'), ('auc','AUC')] %}
+          {% if metrics.get(key) is not none %}
+          <div class="metric">
+            <div class="value">{{ '%.1f'|format(metrics.get(key) * 100) }}%</div>
+            <div class="label">{{ label }}</div>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+      {% if metrics.get('note') %}<p class="hint">{{ metrics.note }}</p>{% endif %}
+      {% if metrics.get('confusion') %}
+      <p class="hint mono">confusion: {{ metrics.confusion }}</p>
+      {% endif %}
+    {% else %}
+      <div class="empty">This model has no measured metrics yet. Metrics appear
+      only after a real local training or evaluation run.</div>
+    {% endif %}
+
+    {% if spec.notes %}<p class="hint">{{ spec.notes }}</p>{% endif %}
+
+    <h3 style="margin-top: 1rem;">Limitations</h3>
+    <ul class="list-check">
+      {% for limitation in spec.limitations %}<li>{{ limitation }}</li>{% endfor %}
+    </ul>
+
+    {% if not status.available %}
+    <h3 style="margin-top: 1rem;">Train locally</h3>
+    <p class="hint">This model appears in the registry but has no checkpoint yet.
+    Train it with the script below; it will then become available automatically.</p>
+    <code class="code-block">.venv\Scripts\python.exe scripts\train_xray.py --model {{ spec.get('torchvision_arch', 'resnet18') }} --epochs 3</code>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

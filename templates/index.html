@@ -1,44 +1,110 @@
 {% extends "base.html" %}
 {% block title %}Dashboard — MediScan AI{% endblock %}
+{% block crumb %}<strong>Dashboard</strong> <span class="dim">/ workspace overview</span>{% endblock %}
 {% block content %}
-<h1>MediScan AI Dashboard</h1>
-<p class="lead">Automated analysis for chest X-ray screening,
-blood-test interpretation, and PDF report extraction.</p>
+<section class="hero">
+  <span class="eyebrow">Local-first research console</span>
+  <h1>Multi-modal analysis, one quiet workspace.</h1>
+  <p class="lead">Screen chest X-rays with a published DenseNet121 model, interpret
+  blood-test values against reference ranges, and extract lab data from PDF
+  reports — with attention maps, measured metrics and honest limits.</p>
+  <div class="btn-row">
+    <a class="btn" href="{{ url_for('xray.xray') }}">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      Analyze an X-ray
+    </a>
+    <a class="btn btn-secondary" href="{{ url_for('eval.dashboard') }}">Open evaluation lab</a>
+    <a class="btn btn-ghost" href="{{ url_for('models.model_center') }}">Browse models</a>
+  </div>
+  <div class="chip-row">
+    <span class="status-pill {% if not xray_status.available %}bad{% endif %}">
+      <span class="dot"></span>
+      {% if xray_status.available %}X-ray model ready{% else %}X-ray model unavailable{% endif %}
+    </span>
+    <span class="chip">{{ available_models }} of {{ total_models }} models available</span>
+    <span class="chip">All processing local</span>
+  </div>
+</section>
 
+<div class="grid-3">
+  <div class="stat">
+    <div class="stat-value">{{ available_models }}</div>
+    <div class="stat-label">Runnable models</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">2</div>
+    <div class="stat-label">Optional local fine-tunes</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">0</div>
+    <div class="stat-label">External uploads</div>
+  </div>
+</div>
+
+<h2 style="margin-top: 1.4rem;">Analysis modules</h2>
 <div class="grid">
-  <div class="card">
-    <h2>Chest X-ray screening</h2>
-    <p>DenseNet121 binary classifier (NORMAL vs PNEUMONIA), pretrained on
-    pediatric chest X-rays.</p>
-    <p>
-      {% if xray_status.available %}
-        <span class="badge badge-ok">Model ready</span>
-      {% else %}
-        <span class="badge badge-warn">Model unavailable</span>
-      {% endif %}
-      <small>{{ xray_status.detail }}</small>
-    </p>
-    <a class="btn" href="{{ url_for('xray.xray') }}">Upload X-ray</a>
-  </div>
+  <a class="card card-link" href="{{ url_for('xray.xray') }}">
+    <div class="card-head">
+      <h3>Chest X-ray screening</h3>
+      <span class="badge {% if xray_status.available %}badge-ok{% else %}badge-warn{% endif %}">
+        {% if xray_status.available %}Ready{% else %}Unavailable{% endif %}
+      </span>
+    </div>
+    <p class="muted">DenseNet121 binary classifier (NORMAL vs PNEUMONIA) trained
+    on pediatric chest X-rays, with optional Grad-CAM attention overlay and
+    input-quality warnings.</p>
+    <p><small class="dim">{{ xray_status.detail }}</small></p>
+  </a>
 
-  <div class="card">
-    <h2>Blood-test interpretation</h2>
-    <p>Enter common lab measurements and flag values outside configurable
-    reference ranges.</p>
-    <a class="btn" href="{{ url_for('labs.labs') }}">Enter results</a>
-  </div>
+  <a class="card card-link" href="{{ url_for('labs.labs') }}">
+    <div class="card-head">
+      <h3>Blood-test interpretation</h3>
+      <span class="badge badge-info">Rules</span>
+    </div>
+    <p class="muted">Enter common lab measurements and flag values outside
+    configurable reference ranges. Range compliance only — no diagnosis.</p>
+  </a>
 
-  <div class="card">
-    <h2>PDF report extraction</h2>
-    <p>Extract text from text-based PDF reports, review it, then interpret
-    detected lab candidates. Scanned PDFs require OCR.</p>
-    <a class="btn" href="{{ url_for('report.report') }}">Upload report</a>
-  </div>
+  <a class="card card-link" href="{{ url_for('report.report') }}">
+    <div class="card-head">
+      <h3>PDF report extraction</h3>
+      <span class="badge badge-info">PyMuPDF</span>
+    </div>
+    <p class="muted">Extract text from text-based PDFs, review it, detect lab
+    candidates and route them into the interpreter. Scanned pages are reported
+    honestly instead of being silently ignored.</p>
+  </a>
 
+  <a class="card card-link" href="{{ url_for('summary.summary') }}">
+    <div class="card-head">
+      <h3>Session summary</h3>
+      <span class="badge">Session</span>
+    </div>
+    <p class="muted">Review everything analyzed in this browser session,
+    export a text summary, or print a clean research sheet.</p>
+  </a>
+</div>
+
+<div class="split" style="margin-top: 1.2rem;">
   <div class="card">
-    <h2>Report summary</h2>
-    <p>Review everything analyzed in this session and download a summary.</p>
-    <a class="btn" href="{{ url_for('summary.summary') }}">View summary</a>
+    <h2>How a case flows</h2>
+    <ul class="list-check">
+      <li><strong>Ingest</strong> — image or PDF is validated, size-checked and kept on this server only.</li>
+      <li><strong>Analyze</strong> — the selected model runs real inference; no values are invented if something fails.</li>
+      <li><strong>Explain</strong> — Grad-CAM attention and quality warnings show where to be skeptical.</li>
+      <li><strong>Measure</strong> — the evaluation lab scores models on the held-out PneumoniaMNIST split.</li>
+      <li><strong>Review</strong> — results stay in session-scoped storage with automatic expiry.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h2>Built to be trusted carefully</h2>
+    <p class="muted">Every model card in this app separates <em>reported</em>
+    metrics (from its original authors) from <em>measured</em> metrics (from
+    local evaluation runs). A model that has not been trained here is shown as
+    unavailable — never silently substituted.</p>
+    <p class="ruo">For research use only. Not for diagnostic use. Trained on
+    pediatric chest X-rays from a single institution; consult a qualified
+    clinician.</p>
   </div>
 </div>
 {% endblock %}

@@ -1,100 +1,95 @@
 {% extends "base.html" %}
 {% block title %}Blood tests — MediScan AI{% endblock %}
+{% block crumb %}<strong>Blood tests</strong> <span class="dim">/ reference-range interpretation</span>{% endblock %}
 {% block content %}
 <h1>Blood-test interpretation</h1>
+<p class="lead muted">Flag measurements against configurable reference
+intervals. Range compliance only — this module makes no diagnosis.</p>
 
 <div class="card">
-  <h2>Sample cases</h2>
-  {% for key, case in sample_cases.items() %}
-    <a class="btn btn-small" href="{{ url_for('labs.labs', case=key) }}">{{ case.title }}</a>
-  {% endfor %}
+  <div class="card-head">
+    <h2>Sample cases</h2>
+    <span class="badge">Synthetic</span>
+  </div>
+  <p class="muted small">Load a teaching case to see how values are handled.
+  These are illustrative inputs, not patient data.</p>
+  <div class="chip-row">
+    {% for key, case in sample_cases.items() %}
+    <a class="chip" href="{{ url_for('labs.labs', case=key) }}">{{ case.title }}</a>
+    {% endfor %}
+  </div>
 </div>
 
 <div class="card">
-  <form method="post" id="lab-form">
-    <table class="table" id="lab-rows">
-      <thead>
-        <tr><th>Test</th><th>Value</th><th>Reference range</th><th></th></tr>
-      </thead>
-      <tbody>
-        {% set rows = prefill if prefill else [{'test':'hemoglobin','value':'','range':''}] %}
-        {% for row in rows %}
-        <tr>
-          <td>
-            <select name="test" class="test-select">
-              {% for key, spec in ref_ranges.items() %}
-                <option value="{{ key }}" {% if row.test == key %}selected{% endif %}>{{ spec.label }}</option>
-              {% endfor %}
-            </select>
-          </td>
-          <td><input type="text" name="value" value="{{ row.value }}" required></td>
-          <td>
-            <select name="range" class="range-select"></select>
-          </td>
-          <td><button type="button" class="btn btn-small remove-row">✕</button></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    <button type="button" class="btn btn-small" id="add-row">Add row</button>
-    <button class="btn" type="submit">Interpret values</button>
+  <h2>Enter measurements</h2>
+  <form method="post" id="lab-form" data-busy="Interpreting…">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="table-wrap">
+      <table class="table" id="lab-rows">
+        <thead>
+          <tr><th>Test</th><th>Value</th><th>Reference range</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% set rows = prefill if prefill else [{'test':'hemoglobin','value':'','range':''}] %}
+          {% for row in rows %}
+          <tr data-range="{{ row.range }}">
+            <td>
+              <select name="test" class="test-select">
+                {% for key, spec in ref_ranges.items() %}
+                  <option value="{{ key }}" {% if row.test == key %}selected{% endif %}>{{ spec.label }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td><input type="text" name="value" value="{{ row.value }}" inputmode="decimal" required></td>
+            <td><select name="range" class="range-select" aria-label="Reference range"></select></td>
+            <td><button type="button" class="btn btn-sm btn-ghost remove-row" aria-label="Remove row">✕</button></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="btn-row">
+      <button type="button" class="btn btn-secondary btn-small" id="add-row">Add row</button>
+      <button class="btn" type="submit">Interpret values</button>
+    </div>
   </form>
+  <p class="hint">Ranges are general configurable intervals; always confirm with
+  the reporting laboratory's own age/sex-specific intervals.</p>
+  <script type="application/json" id="lab-config">{{ ref_ranges | tojson }}</script>
 </div>
 
 {% if result %}
 <div class="card result">
-  <h2>Interpretation</h2>
+  <div class="card-head">
+    <h2>Interpretation</h2>
+    <span class="badge badge-info">{{ result.results|length }} result(s)</span>
+  </div>
   {% if result.results %}
-  <table class="table">
-    <thead><tr><th>Test</th><th>Value</th><th>Unit</th><th>Reference</th><th>Flag</th></tr></thead>
-    <tbody>
-      {% for r in result.results %}
-      <tr>
-        <td>{{ r.label }}</td>
-        <td>{{ r.value }}</td>
-        <td>{{ r.unit }}</td>
-        <td>{{ r.range_low }} – {{ r.range_high }} ({{ r.range }})</td>
-        <td><span class="badge {% if r.flag == 'normal' %}badge-ok{% else %}badge-warn{% endif %}">{{ r.flag|upper }}</span></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>Test</th><th>Value</th><th>Unit</th><th>Reference interval</th><th>Flag</th></tr>
+      </thead>
+      <tbody>
+        {% for r in result.results %}
+        <tr>
+          <td>{{ r.label }}</td>
+          <td class="mono">{{ r.value }}</td>
+          <td>{{ r.unit }}</td>
+          <td>{{ r.range_low }} – {{ r.range_high }} <span class="dim">({{ r.range }})</span></td>
+          <td>
+            <span class="badge {% if r.flag == 'normal' %}badge-ok{% elif r.flag == 'high' %}badge-danger{% else %}badge-warn{% endif %}">
+              {{ r.flag|upper }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% endif %}
+  <p class="ruo">Ranges are reference intervals, not clinical decision limits.
+  Interpret results with a qualified clinician.</p>
 </div>
 {% endif %}
-{% endblock %}
-
-{% block scripts %}
-<script>
-const rangeData = {{ ref_ranges | tojson }};
-function fillRanges(row) {
-  const test = row.querySelector('.test-select').value;
-  const rangeSel = row.querySelector('.range-select');
-  const keep = rangeSel.value;
-  rangeSel.innerHTML = '';
-  (rangeData[test].ranges ? Object.keys(rangeData[test].ranges) : []).forEach(function(key) {
-    const opt = document.createElement('option');
-    opt.value = key; opt.textContent = key;
-    rangeSel.appendChild(opt);
-  });
-  if ([...rangeSel.options].some(o => o.value === keep)) rangeSel.value = keep;
-}
-document.querySelectorAll('#lab-rows tbody tr').forEach(fillRanges);
-document.getElementById('lab-form').addEventListener('change', function(e) {
-  if (e.target.classList.contains('test-select')) fillRanges(e.target.closest('tr'));
-});
-document.getElementById('add-row').addEventListener('click', function() {
-  const tbody = document.querySelector('#lab-rows tbody');
-  const row = tbody.querySelector('tr').cloneNode(true);
-  row.querySelector('input[name=value]').value = '';
-  tbody.appendChild(row);
-  fillRanges(row);
-});
-document.getElementById('lab-form').addEventListener('click', function(e) {
-  if (e.target.classList.contains('remove-row')) {
-    const rows = document.querySelectorAll('#lab-rows tbody tr');
-    if (rows.length > 1) e.target.closest('tr').remove();
-  }
-});
-</script>
 {% endblock %}

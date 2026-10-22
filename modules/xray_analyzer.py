@@ -1,4 +1,4 @@
-"""Chest X-ray pneumonia screening module (EXPERIMENTAL — not a medical device).
+"""Chest X-ray pneumonia screening module (research use only).
 
 Model provenance
 ----------------
@@ -10,6 +10,9 @@ Training data: Kermany et al. (2018) pediatric chest X-ray dataset
 
 Preprocessing per model card: resize to 224x224, convert to 3 channels,
 normalize with ImageNet mean/std, sigmoid on the single logit.
+
+The preprocessing and Grad-CAM helpers are module-level so the optional
+local model adapters (modules/model_adapters.py) use the exact same code.
 """
 
 from __future__ import annotations
@@ -49,6 +52,86 @@ DISCLAIMER = (
     "For research use only. Not for diagnostic use. Trained on pediatric "
     "chest X-rays from a single institution; consult a qualified clinician."
 )
+
+
+# --------------------------------------------------------------------- shared
+def ml_available() -> bool:
+    return _IMPORT_ERROR is None
+
+
+def preprocess_image(image: "Image.Image"):
+    """Model-card preprocessing: RGB, 224x224 bilinear, ImageNet norm."""
+    # Bilinear matches the model card's torchvision transforms.Resize.
+    img = image.convert("RGB").resize(
+        (IMG_SIZE, IMG_SIZE), Image.Resampling.BILINEAR)
+    arr = np.asarray(img, dtype=np.float32) / 255.0
+    tensor = torch.from_numpy(arr).permute(2, 0, 1)
+    mean = torch.tensor(IMAGENET_MEAN).view(3, 1, 1)
+    std = torch.tensor(IMAGENET_STD).view(3, 1, 1)
+    return ((tensor - mean) / std).unsqueeze(0)
+
+
+def compute_gradcam(model, target_module, tensor):
+    """Grad-CAM for ``target_module``'s output via autograd.grad.
+
+    Avoids backward hooks, which clash with DenseNet's inplace ReLU.
+    Returns a normalized (IMG_SIZE x IMG_SIZE) CAM tensor, or None.
+    """
+    feat_holder: dict = {}
+    handle = target_module.register_forward_hook(
+        lambda m, i, out: feat_holder.__setitem__("v", out))
+    try:
+        logits = model(tensor)
+        feat = feat_holder.get("v")
+        if feat is None or not feat.requires_grad:
+            return None
+        (grad,) = torch.autograd.grad(logits.sum(), feat)
+    finally:
+        handle.remove()
+    feat = feat.detach()
+    weights = grad.mean(dim=(2, 3), keepdim=True)
+    cam = torch.relu((weights * feat).sum(dim=1, keepdim=True))
+    cam = torch.nn.functional.interpolate(
+        cam, size=(IMG_SIZE, IMG_SIZE), mode="bilinear",
+        align_corners=False)[0, 0]
+    span = float(cam.max() - cam.min())
+    if span < 1e-8:
+        return None
+    return (cam - cam.min()) / span
+
+
+def heatmap_overlay_b64(image: "Image.Image", cam) -> str:
+    """RGBA Grad-CAM overlay (transparent background) as base64 PNG.
+
+    Kept separate from the source image so the UI can layer it on top with
+    an opacity control; the RGB content of the X-ray is never baked in.
+    """
+    if hasattr(cam, "detach"):
+        cam = cam.detach().cpu().numpy()
+    cam_np = np.asarray(cam, dtype=np.float32)
+    if cam_np.shape != (IMG_SIZE, IMG_SIZE):
+        cam_img = Image.fromarray((np.clip(cam_np, 0, 1) * 255).astype(np.uint8))
+        cam_img = cam_img.resize((IMG_SIZE, IMG_SIZE),
+                                 Image.Resampling.BILINEAR)
+        cam_np = np.asarray(cam_img, dtype=np.float32) / 255.0
+    rgba = np.zeros((IMG_SIZE, IMG_SIZE, 4), dtype=np.uint8)
+    rgba[..., 0] = 255
+    rgba[..., 1] = (255 * (1.0 - cam_np)).astype(np.uint8)
+    rgba[..., 2] = 0
+    rgba[..., 3] = (255 * np.clip(cam_np ** 1.4, 0, 1)).astype(np.uint8)
+    buf = io.BytesIO()
+    Image.fromarray(rgba, mode="RGBA").save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def quality_warnings(image: "Image.Image") -> list[str]:
+    """Cheap, honest input-quality hints (never blocks the analysis)."""
+    try:
+        from .image_quality import analyze_quality
+        return analyze_quality(image)
+    except Exception:  # pragma: no cover - defensive
+        logger.exception("Image quality check failed")
+        return []
 
 
 class XrayAnalyzer:
@@ -115,22 +198,14 @@ class XrayAnalyzer:
 
     # -------------------------------------------------------------- inference
     def _preprocess(self, image: "Image.Image"):
-        # Bilinear matches the model card's torchvision transforms.Resize.
-        img = image.convert("RGB").resize(
-            (IMG_SIZE, IMG_SIZE), Image.Resampling.BILINEAR)
-        arr = np.asarray(img, dtype=np.float32) / 255.0
-        tensor = torch.from_numpy(arr).permute(2, 0, 1)
-        mean = torch.tensor(IMAGENET_MEAN).view(3, 1, 1)
-        std = torch.tensor(IMAGENET_STD).view(3, 1, 1)
-        return ((tensor - mean) / std).unsqueeze(0)
+        return preprocess_image(image)
 
     def analyze_bytes(self, data: bytes, gradcam: bool = False) -> dict:
         """Run pneumonia screening on raw image bytes.
 
-        Returns a dict with ok=True, label, pneumonia_probability and
-        confidence on success; ok=False plus an error message otherwise.
-        With gradcam=True, a successful result also carries heatmap_b64
-        (a base64 PNG Grad-CAM attention overlay). Never fabricates
+        Returns a dict with ok=True, label, pneumonia_probability,
+        confidence, quality warnings and (optionally) heatmap_b64 on success;
+        ok=False plus an error message otherwise. Never fabricates
         predictions.
         """
         try:
@@ -164,7 +239,7 @@ class XrayAnalyzer:
                 p_pneumonia, cam = self._gradcam_forward(tensor)
                 if cam is not None:
                     try:
-                        heatmap_b64 = self._heatmap_overlay(image, cam)
+                        heatmap_b64 = heatmap_overlay_b64(image, cam)
                     except Exception:
                         logger.exception("Grad-CAM overlay failed; "
                                          "continuing without heatmap")
@@ -189,6 +264,7 @@ class XrayAnalyzer:
             "confidence": confidence,
             "model": "DenseNet121 binary pneumonia classifier",
             "disclaimer": DISCLAIMER,
+            "warnings": quality_warnings(image),
         }
         if heatmap_b64 is not None:
             result["heatmap_b64"] = heatmap_b64
@@ -203,31 +279,8 @@ class XrayAnalyzer:
         """
         model = self._model
         try:
-            feat_holder: dict = {}
-            block = model.features.denseblock4
-            h_fwd = block.register_forward_hook(
-                lambda m, i, out: feat_holder.__setitem__("v", out))
-            try:
-                logits = model(tensor)
-                p_pneumonia = float(torch.sigmoid(logits).item())
-                feat = feat_holder.get("v")
-                if feat is None or not feat.requires_grad:
-                    return p_pneumonia, None
-                # Grad w.r.t. the block output; avoids backward hooks, which
-                # clash with DenseNet's inplace ReLU.
-                (grad,) = torch.autograd.grad(logits.sum(), feat)
-            finally:
-                h_fwd.remove()
-            feat = feat.detach()
-            weights = grad.mean(dim=(2, 3), keepdim=True)
-            cam = torch.relu((weights * feat).sum(dim=1, keepdim=True))
-            cam = torch.nn.functional.interpolate(
-                cam, size=(IMG_SIZE, IMG_SIZE), mode="bilinear",
-                align_corners=False)[0, 0]
-            span = float(cam.max() - cam.min())
-            if span < 1e-8:
-                return p_pneumonia, None
-            cam = (cam - cam.min()) / span
+            cam = compute_gradcam(model, model.features.denseblock4, tensor)
+            p_pneumonia = float(torch.sigmoid(model(tensor)).item())
             return p_pneumonia, cam
         except Exception:
             logger.exception("Grad-CAM pass failed; "
@@ -235,23 +288,6 @@ class XrayAnalyzer:
             with torch.no_grad():
                 p_pneumonia = float(torch.sigmoid(model(tensor)).item())
             return p_pneumonia, None
-
-    def _heatmap_overlay(self, image: "Image.Image", cam) -> str:
-        """Blend a normalized CAM onto the image; returns PNG base64."""
-        img = image.convert("RGB").resize(
-            (IMG_SIZE, IMG_SIZE), Image.Resampling.BILINEAR)
-        base = np.asarray(img, dtype=np.float32) / 255.0
-        if hasattr(cam, "detach"):
-            cam = cam.detach().cpu().numpy()
-        cam_np = np.asarray(cam, dtype=np.float32)
-        heat = np.stack([cam_np,
-                         0.25 * (1.0 - cam_np),
-                         np.zeros_like(cam_np)], axis=-1)
-        overlay = np.clip(0.55 * base + 0.45 * heat, 0.0, 1.0)
-        buf = io.BytesIO()
-        Image.fromarray((overlay * 255).astype(np.uint8)).save(
-            buf, format="PNG")
-        return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 def validate_image_upload(filename: str, allowed: set[str]) -> str | None:

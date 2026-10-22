@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Chest X-ray — MediScan AI{% endblock %}
+{% block crumb %}<strong>Chest X-ray</strong> <span class="dim">/ screening</span>{% endblock %}
 {% block content %}
 <h1>Chest X-ray screening</h1>
+<p class="lead muted">Upload a chest radiograph, choose a registered model, and
+optionally overlay a Grad-CAM attention map.</p>
 
 {% if not status.available %}
 <div class="flash flash-error">
@@ -10,53 +13,152 @@
 </div>
 {% endif %}
 
-<div class="card">
-  <form method="post" enctype="multipart/form-data" id="xray-form">
-    <label for="xray_image">Chest X-ray image (PNG, JPEG, BMP, TIFF, WebP; max 10 MB)</label>
-    <input type="file" id="xray_image" name="xray_image" accept="image/*" required>
-    <label class="check">
-      <input type="checkbox" name="heatmap" checked> Attention heatmap (Grad-CAM)
-    </label>
-    <button class="btn" type="submit" {% if not status.available %}disabled{% endif %}>Analyze</button>
-  </form>
+<div class="split">
+  <div class="card">
+    <div class="card-head">
+      <h2>New analysis</h2>
+      <span class="badge badge-info">Grad-CAM</span>
+    </div>
+    <form method="post" enctype="multipart/form-data" id="xray-form" data-busy="Analyzing…">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <label for="model">Model</label>
+      <select name="model" id="model">
+        {% for model in models %}
+        <option value="{{ model.key }}"
+                {% if model.key == selected_key %}selected{% endif %}
+                {% if not model.available %}disabled{% endif %}>
+          {{ model.name }}{% if not model.available %} — not available yet{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+      <p class="hint">Unavailable models stay disabled until a local checkpoint exists.
+        See <a href="{{ url_for('models.model_center') }}">Model center</a>.</p>
+
+      <label class="dropzone" for="xray_image" data-dropzone>
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        <span class="dropzone-title">Drop a chest X-ray here</span>
+        <span class="dropzone-hint">PNG, JPEG, BMP, TIFF, WebP or DICOM · max 10 MB</span>
+        <span class="file-name" data-file-name data-default-text="No file selected">No file selected</span>
+        <input type="file" id="xray_image" name="xray_image"
+               accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,.dcm,.dicom,image/*" required>
+      </label>
+
+      <label class="check">
+        <input type="checkbox" name="heatmap" checked> Attention heatmap (Grad-CAM)
+      </label>
+
+      <div class="upload-actions">
+        <button class="btn" type="submit" {% if not status.available %}disabled{% endif %}>
+          Analyze X-ray
+        </button>
+        <a class="btn btn-ghost" href="{{ url_for('models.model_center') }}">Model details</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>What happens inside</h2>
+    <ul class="list-check">
+      <li>Image decoded and checked: minimum 128 px per side, common formats, optional DICOM conversion.</li>
+      <li>Resized to 224×224, ImageNet normalization, single-logit sigmoid.</li>
+      <li>Attention map computed from the last DenseNet block with <span class="mono">autograd.grad</span>.</li>
+      <li>Quality hints (contrast, blur, aspect ratio) are warnings — never hidden rejections.</li>
+      <li>No score is fabricated: if inference fails, the error is shown and nothing is stored.</li>
+    </ul>
+    <p class="ruo">For research use only. Not for diagnostic use. The model was
+    trained on pediatric X-rays from a single institution.</p>
+  </div>
 </div>
 
 {% if result and result.ok %}
-<div class="card result">
-  <h2>Result</h2>
-  {% if image_filename %}
-    <img class="xray-preview" src="{{ url_for('xray.uploaded_xray', filename=image_filename) }}" alt="Uploaded chest X-ray">
-  {% endif %}
-  <table class="table">
-    <tr><th>Label</th><td><span class="badge {% if result.label == 'PNEUMONIA' %}badge-warn{% else %}badge-ok{% endif %}">{{ result.label }}</span></td></tr>
-    <tr><th>P(pneumonia)</th><td>{{ '%.3f'|format(result.pneumonia_probability) }}</td></tr>
-    <tr><th>Model confidence</th><td>{{ '%.1f'|format(result.confidence * 100) }}%</td></tr>
-    <tr><th>Model</th><td>{{ result.model }}</td></tr>
-  </table>
-  {% if result.heatmap_b64 %}
-  <div class="heatmap-block">
-    <h3>Attention heatmap (Grad-CAM)</h3>
-    <img class="heatmap" src="data:image/png;base64,{{ result.heatmap_b64 }}" alt="Grad-CAM attention heatmap">
-    <p><small>Highlighted regions contributed most to this prediction.</small></p>
+<div class="card result" style="margin-top: 1.1rem;">
+  <div class="card-head">
+    <h2>Result</h2>
+    <span class="badge {% if result.label == 'PNEUMONIA' %}badge-warn{% else %}badge-ok{% endif %}">
+      {{ result.label }}
+    </span>
   </div>
-  {% endif %}
-  <p class="ruo"><small>{{ result.disclaimer }}</small></p>
+  <div class="split">
+    <div>
+      {% if image_filename %}
+        {% if result.heatmap_b64 %}
+        <div data-heatmap-scope>
+          <div class="heatmap-stage">
+            <img class="base" src="{{ url_for('xray.uploaded_xray', filename=image_filename) }}" alt="Uploaded chest X-ray">
+            <img class="overlay" data-heatmap-overlay
+                 src="data:image/png;base64,{{ result.heatmap_b64 }}"
+                 alt="Grad-CAM attention overlay" style="opacity: 0.55;">
+          </div>
+          <div class="heatmap-controls">
+            <span>Overlay</span>
+            <input type="range" min="0" max="100" value="55" data-heatmap-range
+                   aria-label="Attention overlay opacity">
+            <output data-heatmap-value>55%</output>
+          </div>
+          <div class="heatmap-legend">
+            <span class="heatmap-swatch"></span>
+            <span>low → high attention</span>
+          </div>
+        </div>
+        {% else %}
+        <div class="scan-frame">
+          <img src="{{ url_for('xray.uploaded_xray', filename=image_filename) }}" alt="Uploaded chest X-ray">
+        </div>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    <div>
+      <div class="result-grid">
+        <div class="kv-row">
+          <div class="kv-label">Predicted label</div>
+          <div class="kv-value">{{ result.label }}</div>
+        </div>
+        <div class="kv-row">
+          <div class="kv-label">P(pneumonia)</div>
+          <div class="kv-value mono">{{ '%.3f'|format(result.pneumonia_probability) }}</div>
+        </div>
+        <div class="kv-row">
+          <div class="kv-label">Model certainty (uncalibrated)</div>
+          <div class="kv-value">{{ '%.1f'|format(result.confidence * 100) }}%</div>
+        </div>
+        <div class="kv-row">
+          <div class="kv-label">Model</div>
+          <div class="kv-value">{{ result.model }}</div>
+        </div>
+      </div>
+
+      <div class="gauge">
+        <div class="gauge-head">
+          <span>P(pneumonia)</span>
+          <span class="mono">{{ '%.1f'|format(result.pneumonia_probability * 100) }}%</span>
+        </div>
+        <div class="gauge-track">
+          <div class="gauge-fill" style="width: {{ '%.0f'|format(result.pneumonia_probability * 100) }}%"></div>
+        </div>
+        <div class="gauge-scale"><span>NORMAL</span><span>0.5</span><span>PNEUMONIA</span></div>
+      </div>
+
+      {% if result.get('warnings') %}
+      <div class="warnings">
+        <strong>Input-quality warnings</strong>
+        <ul>
+          {% for warning in result.get('warnings') %}
+          <li>{{ warning }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if result.heatmap_b64 %}
+      <p class="hint">Highlighted regions contributed most to this prediction.
+      Use the opacity slider to compare against the original radiograph.</p>
+      {% endif %}
+
+      <p class="ruo">{{ result.disclaimer }}</p>
+    </div>
+  </div>
 </div>
 {% endif %}
-{% endblock %}
-
-{% block scripts %}
-<script>
-(function () {
-  var form = document.getElementById('xray-form');
-  if (!form) return;
-  form.addEventListener('submit', function () {
-    var btn = form.querySelector('button[type="submit"]');
-    if (!btn || btn.disabled) return;
-    btn.disabled = true;
-    btn.dataset.label = btn.textContent;
-    btn.textContent = 'Analyzing\u2026';
-  });
-})();
-</script>
 {% endblock %}

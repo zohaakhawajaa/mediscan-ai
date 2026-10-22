@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Activity — MediScan AI{% endblock %}
+{% block crumb %}<strong>Activity</strong> <span class="dim">/ session history</span>{% endblock %}
+{% block content %}
+<h1>Activity</h1>
+<p class="lead muted">Metadata-only history for this browser session: what ran,
+when, and with which model. Images, report text and lab values are never
+stored here. Entries expire after {{ ttl_hours }} hours.</p>
+
+<div class="card">
+  <div class="card-head">
+    <h2>Recent actions</h2>
+    <form method="post" action="{{ url_for('main.history_clear') }}" class="inline"
+          data-confirm="Clear this session's activity history?" data-busy="Clearing…">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-small btn-secondary" type="submit">Clear history</button>
+    </form>
+  </div>
+
+  {% if entries %}
+  <ul class="timeline">
+    {% for entry in entries %}
+    <li>
+      <span class="t-kind">{{ entry.kind }}</span>
+      <div class="t-label">{{ entry.label }}</div>
+      <div class="t-at">{{ entry.at | ts }}
+        {% if entry.model_key %} · <span class="mono">{{ entry.model_key }}</span>{% endif %}
+        {% if entry.pages %} · {{ entry.pages }} page(s){% endif %}
+        {% if entry.count %} · {{ entry.count }} value(s){% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="empty">No activity yet. Analyses, extractions, comparisons and
+  evaluations will appear here (without any clinical content).</div>
+  {% endif %}
+</div>
+{% endblock %}
