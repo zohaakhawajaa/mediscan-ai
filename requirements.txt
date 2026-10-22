@@ -6,5 +6,6 @@ numpy>=1.26
 torch>=2.2
 torchvision>=0.17
 pydicom>=3.0  # optional DICOM import (single-frame)
-waitress>=3.0  # production WSGI server
+waitress>=3.0  # production WSGI server (Windows/local)
+gunicorn>=21.2  # production WSGI server (Linux hosts such as Render)
 pytest>=8.0

@@ -1,0 +1,28 @@
+# Render Blueprint for MediScan AI (free web service).
+# Push this repo, then in Render: New > Blueprint > pick this repo.
+services:
+  - type: web
+    name: mediscan-ai
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    # Single worker: the app keeps an in-process model cache and uses
+    # in-memory sessions. Threads give concurrency without duplicating the
+    # loaded DenseNet weights in memory (free tier is 512 MB RAM).
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 300 --access-logfile - --error-logfile -
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: MEDISCAN_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.12.6
+      # Tell the app to fetch the DenseNet checkpoint from the HF Hub at
+      # first inference into the writable models/xray/ directory.
+      - key: HF_HOME
+        value: /opt/render/project/src/models/.hf
+      # Render generates a strong secret automatically; the app validates it.
+      - key: MEDISCAN_SECRET_KEY
+        generateValue: true

@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.pytest_cache/
+uploads/
+.report_store/
+.history_store/
+.eval_store/
+test_uploads/
+test_report_store/
+models/
+validation_data/
+*.log
+tests/
+scripts/

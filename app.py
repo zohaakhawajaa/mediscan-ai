@@ -96,5 +96,9 @@ app = create_app()
 
 if __name__ == "__main__":
     debug = os.environ.get("MEDISCAN_DEBUG") == "1"
-    port = int(os.environ.get("MEDISCAN_PORT", "5001"))
-    app.run(host="127.0.0.1", port=port, debug=debug)
+    # MEDISCAN_PORT wins locally; PORT is the conventional host variable
+    # (Render, Heroku, Railway). Default stays 5001 for local runs.
+    port = int(os.environ.get("MEDISCAN_PORT")
+               or os.environ.get("PORT") or "5001")
+    host = os.environ.get("MEDISCAN_HOST", "127.0.0.1")
+    app.run(host=host, port=port, debug=debug)
